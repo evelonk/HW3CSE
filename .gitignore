@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.cache
+*.db
+
+.idea/
+.vscode/
+
+.DS_Store
+Thumbs.db
+
+docker-compose.override.yml
+*.log

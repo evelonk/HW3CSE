@@ -1,0 +1,97 @@
+version: "3.9"
+
+services:
+
+  postgres-filestorage:
+    image: postgres:16
+    container_name: postgres-filestorage
+    environment:
+      POSTGRES_DB: filestorage
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"   
+    volumes:
+      - filestorage_pgdata:/var/lib/postgresql/data
+    restart: always
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000" 
+      - "9001:9001"
+    volumes:
+      - filestorage_minio:/data
+    restart: always
+
+  filestorageservice:
+    build:
+      context: ./FileStorageService
+      dockerfile: Dockerfile
+    container_name: filestorageservice
+    depends_on:
+      - postgres-filestorage
+      - minio
+    environment:
+      - ConnectionStrings__Postgres=Host=postgres-filestorage;Port=5432;Database=filestorage;Username=postgres;Password=postgres
+      - S3__ServiceUrl=http://minio:9000
+      - S3__AccessKey=minioadmin
+      - S3__SecretKey=minioadmin
+      - S3__Bucket=files
+    expose:
+      - "8080"    
+    restart: always
+
+
+  postgres-analysis:
+    image: postgres:16
+    container_name: postgres-analysis
+    environment:
+      POSTGRES_DB: analysis
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"   
+    volumes:
+      - analysis_pgdata:/var/lib/postgresql/data
+    restart: always
+
+  fileanalysisservice:
+    build:
+      context: ./FileAnalysisService
+      dockerfile: Dockerfile
+    container_name: fileanalysisservice
+    depends_on:
+      - postgres-analysis
+    environment:
+      - ConnectionStrings__Postgres=Host=postgres-analysis;Port=5432;Database=analysis;Username=postgres;Password=postgres
+      - FileStorage__BaseUrl=http://filestorageservice:8080
+    expose:
+      - "8080"     
+    restart: always
+
+  apigateway:
+    build:
+      context: ./ApiGateway
+      dockerfile: Dockerfile
+    container_name: apigateway
+    depends_on:
+      - filestorageservice
+      - fileanalysisservice
+    environment:
+      - Services__FileStorage=http://filestorageservice:8080
+      - Services__FileAnalysis=http://fileanalysisservice:8080
+    ports:
+      - "8085:8080"   
+    restart: always
+
+
+volumes:
+  filestorage_pgdata:
+  filestorage_minio:
+  analysis_pgdata:
